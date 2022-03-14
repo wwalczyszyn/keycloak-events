@@ -6,7 +6,10 @@ import javax.ws.rs.NotAuthorizedException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.Response;
 import lombok.extern.jbosslog.JBossLog;
+import org.jboss.resteasy.spi.HttpRequest;
+import org.jboss.resteasy.spi.HttpResponse;
 import org.keycloak.common.ClientConnection;
 import org.keycloak.jose.jws.JWSInput;
 import org.keycloak.jose.jws.JWSInputException;
@@ -17,6 +20,7 @@ import org.keycloak.representations.AccessToken;
 import org.keycloak.services.managers.AppAuthManager;
 import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.services.managers.RealmManager;
+import org.keycloak.services.resources.Cors;
 import org.keycloak.services.resources.admin.AdminAuth;
 import org.keycloak.services.resources.admin.AdminEventBuilder;
 import org.keycloak.services.resources.admin.permissions.AdminPermissionEvaluator;
@@ -42,7 +46,31 @@ public abstract class AbstractAdminResource {
     setupAuth();
     setupEvents();
     setupPermissions();
+    setupCors();
     init();
+  }
+
+  public static final String[] METHODS = {
+    "GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
+  };
+
+  private void setupCors() {
+    HttpRequest request = session.getContext().getContextObject(HttpRequest.class);
+    HttpResponse response = session.getContext().getContextObject(HttpResponse.class);
+    Cors.add(request)
+        .allowedOrigins(auth.getToken())
+        .allowedMethods(METHODS)
+        .exposedHeaders("Location")
+        .auth()
+        .build(response);
+  }
+
+  @OPTIONS
+  @Path("{any:.*}")
+  public Response preflight() {
+    log.debug("CORS OPTIONS preflight request");
+    HttpRequest request = session.getContext().getContextObject(HttpRequest.class);
+    return Cors.add(request, Response.ok()).auth().allowedMethods(METHODS).preflight().build();
   }
 
   public void requireAdminRole(String role) {
