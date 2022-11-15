@@ -69,7 +69,6 @@ public class KeycloakSuite implements TestRule {
     "keycloak.profile.feature.account2=enabled",
     "keycloak.profile.feature.scripts=enabled"
   };
-  //    "product.version=${keycloak.version}",
 
   private void setSystemProps(String[] props) {
     for (String prop : props) {

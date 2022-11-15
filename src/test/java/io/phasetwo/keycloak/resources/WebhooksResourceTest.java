@@ -3,36 +3,53 @@ package io.phasetwo.keycloak.resources;
 import static io.phasetwo.keycloak.Helpers.*;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.*;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.github.xgp.http.server.Server;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import io.phasetwo.keycloak.KeycloakSuite;
+import dasniko.testcontainers.keycloak.KeycloakContainer;
 import io.phasetwo.keycloak.events.HttpSenderEventListenerProvider;
 import io.phasetwo.keycloak.representation.WebhookRepresentation;
+import java.io.File;
 import java.net.URLEncoder;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.jbosslog.JBossLog;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.jboss.shrinkwrap.resolver.api.maven.Maven;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.keycloak.admin.client.Keycloak;
+import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.broker.provider.util.SimpleHttp;
+import org.keycloak.representations.idm.CredentialRepresentation;
+import org.keycloak.representations.idm.IdentityProviderMapperRepresentation;
+import org.keycloak.representations.idm.IdentityProviderRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 @JBossLog
+@Testcontainers
 public class WebhooksResourceTest {
+  static final List<File> dependencies = Maven.resolver()
+                                         .loadPomFromFile("./pom.xml")
+                                         .resolve("org.keycloak:keycloak-admin-client")
+                                         .withoutTransitivity().asList(File.class);
 
-  @ClassRule public static KeycloakSuite server = KeycloakSuite.SERVER;
+  @Container static final KeycloakContainer server = new KeycloakContainer("quay.io/keycloak/keycloak:20.0.1").withContextPath("/auth/").withProviderClassesFrom("target/classes").withProviderLibsFrom(dependencies);
 
   CloseableHttpClient httpClient = HttpClients.createDefault();
 
   String baseUrl() {
-    return server.getAuthUrl() + "/realms/master/webhooks";
+    return server.getAuthServerUrl() + "/realms/master/webhooks";
   }
 
   String urlencode(String u) {
@@ -42,10 +59,15 @@ public class WebhooksResourceTest {
       return "";
     }
   }
+  
+  Keycloak getKeycloak() {
+    assertTrue(server.isRunning());
+    return server.getKeycloakAdminClient();
+  }
 
   @Test
   public void testAddGetWebhook() throws Exception {
-    Keycloak keycloak = server.client();
+    Keycloak keycloak = getKeycloak();
 
     String url = "https://example.com/testAddGetWebhook";
     String id = createWebhook(keycloak, httpClient, baseUrl(), url, "A3jt6D8lz", null);
@@ -74,7 +96,7 @@ public class WebhooksResourceTest {
 
   @Test
   public void testUpdateGetWebhook() throws Exception {
-    Keycloak keycloak = server.client();
+    Keycloak keycloak = getKeycloak();
 
     String url = "https://example.com/testUpdateGetWebhook";
     String secret = "A3jt6D8lz";
@@ -117,7 +139,7 @@ public class WebhooksResourceTest {
 
   @Test
   public void testRemoveWebhoook() throws Exception {
-    Keycloak keycloak = server.client();
+    Keycloak keycloak = getKeycloak();
 
     String id =
         createWebhook(
@@ -143,7 +165,7 @@ public class WebhooksResourceTest {
 
   @Test
   public void testWebhookReceivesEvent() throws Exception {
-    Keycloak keycloak = server.client();
+    Keycloak keycloak = getKeycloak();
     // update a realm with the ext-event-webhook listener
     addEventListener(keycloak, "master", "ext-event-webhook");
 
