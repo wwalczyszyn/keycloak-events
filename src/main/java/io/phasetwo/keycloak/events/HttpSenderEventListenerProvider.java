@@ -1,22 +1,28 @@
 package io.phasetwo.keycloak.events;
 
-import static java.net.HttpURLConnection.HTTP_MULT_CHOICE;
-import static java.net.HttpURLConnection.HTTP_OK;
-
 import com.github.xgp.util.BackOff;
 import com.github.xgp.util.ExponentialBackOff;
-import java.io.IOException;
-import java.security.SignatureException;
-import java.util.Optional;
-import java.util.concurrent.ScheduledExecutorService;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import lombok.extern.jbosslog.JBossLog;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.keycloak.broker.provider.util.SimpleHttp;
 import org.keycloak.models.KeycloakSession;
+import org.keycloak.representations.idm.AdminEventRepresentation;
+import org.keycloak.representations.idm.EventRepresentation;
 import org.keycloak.util.JsonSerialization;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
+import java.security.SignatureException;
+import java.util.Arrays;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.stream.Collectors;
+
+import static java.net.HttpURLConnection.HTTP_MULT_CHOICE;
+import static java.net.HttpURLConnection.HTTP_OK;
 
 @JBossLog
 public class HttpSenderEventListenerProvider extends SenderEventListenerProvider {
@@ -30,6 +36,8 @@ public class HttpSenderEventListenerProvider extends SenderEventListenerProvider
   protected static final String BACKOFF_MAX_INTERVAL = "backoffMaxInterval";
   protected static final String BACKOFF_MULTIPLIER = "backoffMultiplier";
   protected static final String BACKOFF_RANDOMIZATION_FACTOR = "backoffRandomizationFactor";
+  protected static final String EVENT_TYPES = "eventTypes";
+  protected static final String ADMIN_EVENT_RESOURCE_TYPES = "adminEventResourceTypes";
 
   public HttpSenderEventListenerProvider(KeycloakSession session, ScheduledExecutorService exec) {
     super(session, exec);
@@ -64,7 +72,31 @@ public class HttpSenderEventListenerProvider extends SenderEventListenerProvider
 
   @Override
   void send(SenderTask task) throws SenderException, IOException {
-    send(task, getTargetUri(), getSharedSecret(), getHmacAlgorithm());
+    Object event = task.getEvent();
+    String targetUri = getTargetUri();
+
+    if (config.containsKey(EVENT_TYPES) && event instanceof EventRepresentation) {
+      EventRepresentation eventRepresentation = (EventRepresentation) event;
+
+      Set<String> includedEventTypes = Arrays.stream(config.get(EVENT_TYPES).toString().split(","))
+          .map(String::trim).collect(Collectors.toSet());
+
+      if (!includedEventTypes.isEmpty() && !includedEventTypes.contains(eventRepresentation.getType())) {
+        log.debugf("skipping sending to %s event of type %s", targetUri, eventRepresentation.getType());
+        return; // skip
+      }
+    } else if (config.containsKey(ADMIN_EVENT_RESOURCE_TYPES) && event instanceof AdminEventRepresentation) {
+      AdminEventRepresentation adminEventRepresentation = (AdminEventRepresentation) event;
+
+      Set<String> includedResourceTypes = Arrays.stream(config.get(ADMIN_EVENT_RESOURCE_TYPES).toString().split(","))
+          .map(String::trim).collect(Collectors.toSet());
+
+      if (!includedResourceTypes.isEmpty() && !includedResourceTypes.contains(adminEventRepresentation.getResourceType())) {
+        log.debugf("skipping sending to %s admin event for resource type %s", targetUri, adminEventRepresentation.getResourceType());
+        return;
+      }
+    }
+    send(task, targetUri, getSharedSecret(), getHmacAlgorithm());
   }
 
   protected void send(
