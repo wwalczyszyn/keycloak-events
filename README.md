@@ -71,6 +71,8 @@ Configuration values:
 | `targetUri` | Y |  | The URI to send the event payload |
 | `sharedSecret` | N |  | The shared secret value to use for HMAC signing. If present, the signature according to RFC2104 will be passed as `X-Keycloak-Signature` header |
 | `hmacAlgorithm` | N | HmacSHA256 | The HMAC algortihm used for signing. Defaults to HmacSHA256. Can be set to HmacSHA1 for backwards compatibility |
+| `eventTypes` | N | * | User event types for which send the event, comma-separated list (e.g. REGISTRATION,DELETE_ACCOUNT) |
+| `adminEventTypes` | N | * | Admin event types for which send the event, comma-separated list of resource type : operation type pairs (e.g. USER:CREATE,REALM:*,*:DELETE) |
 | `retry` | N | true | Should it use exponential backoff to retry on non 2xx response |
 | `backoffInitialInterval` | N | 500 | Initial interval value in milliseconds |
 | `backoffMaxElapsedTime` | N | 900000 | Maximum elapsed time in milliseconds |

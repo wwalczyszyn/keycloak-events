@@ -37,7 +37,7 @@ public class HttpSenderEventListenerProvider extends SenderEventListenerProvider
   protected static final String BACKOFF_MULTIPLIER = "backoffMultiplier";
   protected static final String BACKOFF_RANDOMIZATION_FACTOR = "backoffRandomizationFactor";
   protected static final String EVENT_TYPES = "eventTypes";
-  protected static final String ADMIN_EVENT_RESOURCE_TYPES = "adminEventResourceTypes";
+  protected static final String ADMIN_EVENT_TYPES = "adminEventTypes";
 
   public HttpSenderEventListenerProvider(KeycloakSession session, ScheduledExecutorService exec) {
     super(session, exec);
@@ -70,29 +70,40 @@ public class HttpSenderEventListenerProvider extends SenderEventListenerProvider
     return Optional.ofNullable(config.get(HMAC_ALGORITHM)).map(Object::toString);
   }
 
+  Set<String> getEnabledUserEventTypes() {
+    return Arrays.stream(config.get(EVENT_TYPES).toString().split(","))
+        .map(String::trim).map(String::toUpperCase).collect(Collectors.toSet());
+  }
+
+  Set<String> getEnabledAdminEventTypes() {
+    return Arrays.stream(config.get(ADMIN_EVENT_TYPES).toString().split(","))
+        .map(String::trim).map(String::toUpperCase).collect(Collectors.toSet());
+  }
+
   @Override
   void send(SenderTask task) throws SenderException, IOException {
     Object event = task.getEvent();
     String targetUri = getTargetUri();
 
-    if (config.containsKey(EVENT_TYPES) && event instanceof EventRepresentation) {
+    if (config.containsKey(EVENT_TYPES) && !config.get(EVENT_TYPES).equals("*") && event instanceof EventRepresentation) {
       EventRepresentation eventRepresentation = (EventRepresentation) event;
 
-      Set<String> includedEventTypes = Arrays.stream(config.get(EVENT_TYPES).toString().split(","))
-          .map(String::trim).collect(Collectors.toSet());
+      Set<String> includedEventTypes = getEnabledUserEventTypes();
 
       if (!includedEventTypes.isEmpty() && !includedEventTypes.contains(eventRepresentation.getType())) {
         log.debugf("skipping sending to %s event of type %s", targetUri, eventRepresentation.getType());
         return; // skip
       }
-    } else if (config.containsKey(ADMIN_EVENT_RESOURCE_TYPES) && event instanceof AdminEventRepresentation) {
+    } else if (config.containsKey(ADMIN_EVENT_TYPES) && !config.get(ADMIN_EVENT_TYPES).equals("*") && event instanceof AdminEventRepresentation) {
       AdminEventRepresentation adminEventRepresentation = (AdminEventRepresentation) event;
+      String eventType = adminEventRepresentation.getResourceType() + ":" + adminEventRepresentation.getOperationType();
+      String widlcardOperationEventType = adminEventRepresentation.getResourceType() + ":*";
+      String widlcardResourceEventType = "*:" + adminEventRepresentation.getOperationType();
 
-      Set<String> includedResourceTypes = Arrays.stream(config.get(ADMIN_EVENT_RESOURCE_TYPES).toString().split(","))
-          .map(String::trim).collect(Collectors.toSet());
+      Set<String> includedResourceTypes = getEnabledAdminEventTypes();
 
-      if (!includedResourceTypes.isEmpty() && !includedResourceTypes.contains(adminEventRepresentation.getResourceType())) {
-        log.debugf("skipping sending to %s admin event for resource type %s", targetUri, adminEventRepresentation.getResourceType());
+      if (!includedResourceTypes.isEmpty() && !includedResourceTypes.contains(eventType) && !includedResourceTypes.contains(widlcardOperationEventType) && !includedResourceTypes.contains(widlcardResourceEventType)) {
+        log.debugf("skipping sending to %s admin event for event type %s", targetUri, eventType);
         return;
       }
     }
