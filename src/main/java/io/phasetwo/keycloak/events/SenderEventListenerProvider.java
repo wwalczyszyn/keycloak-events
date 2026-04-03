@@ -1,12 +1,16 @@
 package io.phasetwo.keycloak.events;
 
 import com.github.xgp.util.BackOff;
+import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import io.phasetwo.keycloak.config.Configurable;
 import java.io.IOException;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import lombok.extern.jbosslog.JBossLog;
 import org.keycloak.events.Event;
 import org.keycloak.events.EventListenerProvider;
@@ -50,8 +54,7 @@ public abstract class SenderEventListenerProvider implements EventListenerProvid
 
   @Override
   public void close() {
-    // close this instance of the event listener
-    log.debugf("called close() on SenderEventListenerProvider");
+    log.tracef("called close() on SenderEventListenerProvider");
   }
 
   class SenderTask {
@@ -74,6 +77,13 @@ public abstract class SenderEventListenerProvider implements EventListenerProvid
 
     public Map<String, String> getProperties() {
       return this.properties;
+    }
+
+    @Override
+    public String toString() {
+      return String.format(
+          "[%s] %s",
+          event != null ? event.getClass().getName() : "null", formatMap(properties, IGNORE_KEYS));
     }
   }
 
@@ -110,14 +120,14 @@ public abstract class SenderEventListenerProvider implements EventListenerProvid
             try {
               send(task);
             } catch (SenderException | IOException e) {
-              log.debug("sending exception", e);
+              log.trace("sending exception", e);
               if (e instanceof SenderException && !((SenderException) e).isRetryable()) return;
-              log.debugf(
+              log.tracef(
                   "BackOff policy is %s",
                   BackOff.STOP_BACKOFF == task.getBackOff() ? "STOP" : "BACKOFF");
               long backOffTime = task.getBackOff().nextBackOffMillis();
               if (backOffTime == BackOff.STOP) return;
-              log.debugf("retrying in %d due to %s", backOffTime, e.getCause());
+              log.tracef("retrying in %d due to %s", backOffTime, e.getCause());
               schedule(task, backOffTime, TimeUnit.MILLISECONDS);
             } catch (Throwable t) {
               log.warn("Uncaught Sender error", t);
@@ -131,4 +141,18 @@ public abstract class SenderEventListenerProvider implements EventListenerProvid
   }
 
   abstract void send(SenderTask task) throws SenderException, IOException;
+
+  static final Set<String> IGNORE_KEYS = ImmutableSet.of("secret");
+
+  static String formatMap(Map<String, String> map, final Set<String> ignoreKeys) {
+    if (map == null || map.isEmpty()) {
+      return "";
+    }
+    Map<String, String> filtered =
+        map.entrySet().stream()
+            .filter(e -> e.getKey() != null && e.getValue() != null)
+            .filter(e -> !ignoreKeys.contains(e.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    return Joiner.on(", ").withKeyValueSeparator("=>").join(filtered);
+  }
 }

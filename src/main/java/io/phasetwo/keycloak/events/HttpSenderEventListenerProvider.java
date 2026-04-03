@@ -5,7 +5,7 @@ import com.github.xgp.util.ExponentialBackOff;
 import lombok.extern.jbosslog.JBossLog;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.keycloak.broker.provider.util.SimpleHttp;
+import org.keycloak.broker.provider.util.LegacySimpleHttp;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.representations.idm.AdminEventRepresentation;
 import org.keycloak.representations.idm.EventRepresentation;
@@ -52,8 +52,8 @@ public class HttpSenderEventListenerProvider extends SenderEventListenerProvider
       return new ExponentialBackOff.Builder()
           .setInitialIntervalMillis(getIntOr(config, BACKOFF_INITIAL_INTERVAL, 500))
           .setMaxElapsedTimeMillis(getIntOr(config, BACKOFF_MAX_ELAPSED_TIME, 900000))
-          .setMaxIntervalMillis(getIntOr(config, BACKOFF_MAX_INTERVAL, 60000))
-          .setMultiplier(getDoubleOr(config, BACKOFF_MULTIPLIER, 1.5))
+          .setMaxIntervalMillis(getIntOr(config, BACKOFF_MAX_INTERVAL, 180000))
+          .setMultiplier(getDoubleOr(config, BACKOFF_MULTIPLIER, 5))
           .setRandomizationFactor(getDoubleOr(config, BACKOFF_RANDOMIZATION_FACTOR, 0.5))
           .build();
   }
@@ -115,18 +115,18 @@ public class HttpSenderEventListenerProvider extends SenderEventListenerProvider
       throws SenderException, IOException {
     log.debugf("attempting send to %s", targetUri);
     try (CloseableHttpClient http = HttpClients.createDefault()) {
-      //      SimpleHttp request = SimpleHttp.doPost(targetUri, session).json(task.getEvent());
-      SimpleHttp request = SimpleHttp.doPost(targetUri, http).json(task.getEvent());
+      LegacySimpleHttp request = LegacySimpleHttp.doPost(targetUri, http).json(task.getEvent());
       sharedSecret.ifPresent(
           secret ->
               request.header(
                   "X-Keycloak-Signature",
                   hmacFor(task.getEvent(), secret, algorithm.orElse(HMAC_SHA256_ALGORITHM))));
-      SimpleHttp.Response response = request.asResponse();
+      LegacySimpleHttp.Response response = request.asResponse();
       int status = response.getStatus();
       log.debugf("sent to %s (%d)", targetUri, status);
+      doAfterSend(task, status);
       if (status < HTTP_OK || status >= HTTP_MULT_CHOICE) { // any 2xx is acceptable
-        log.warnf("Sending failure (Server response:%d)", status);
+        log.warnf("Sending failure for %s (Server response:%d) - %s", targetUri, status, task);
         throw new SenderException(true);
       }
     } catch (SenderException se) {
@@ -137,6 +137,16 @@ public class HttpSenderEventListenerProvider extends SenderEventListenerProvider
       throw new SenderException(false, e);
     }
   }
+
+  protected final void doAfterSend(SenderTask task, int httpStatus) {
+    try {
+      afterSend(task, httpStatus);
+    } catch (Exception e) {
+      log.warn("Error afterSend", e);
+    }
+  }
+
+  protected void afterSend(SenderTask task, int httpStatus) {}
 
   protected String hmacFor(Object o, String sharedSecret, String algorithm) {
     try {
