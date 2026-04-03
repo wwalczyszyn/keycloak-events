@@ -3,7 +3,11 @@
   <groupId>io.phasetwo.keycloak</groupId>
   <artifactId>keycloak-events</artifactId>
   <packaging>jar</packaging>
-  <version>0.30-SNAPSHOT</version>
+  <version>0.53-SNAPSHOT</version>
+
+  <name>Phase Two Keycloak Events</name>
+  <description>Useful Keycloak EventListener implementations and utilities.</description>
+  <url>https://github.com/p2-inc/keycloak-events</url>
 
   <parent>
     <groupId>com.github.xgp</groupId>
@@ -26,14 +30,15 @@
   </licenses>
   
   <properties>
-    <java.version>17</java.version>
+    <java.version>21</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <main.java.package>io.phasetwo.keycloak.events</main.java.package>
-    <junit.version>5.8.2</junit.version>
-    <keycloak.version>24.0.3</keycloak.version>
-    <lombok.version>1.18.32</lombok.version>
+    <junit.version>5.11.2</junit.version>
+    <keycloak.version>26.5.0</keycloak.version>
+    <keycloak-admin-client.version>26.0.8</keycloak-admin-client.version>
+    <lombok.version>1.18.42</lombok.version>
     <auto-service.version>1.1.1</auto-service.version>
-    <ossrh.url>https://s01.oss.sonatype.org</ossrh.url>
+    <ossrh.url>https://ossrh-staging-api.central.sonatype.com</ossrh.url>
   </properties>
 
   <scm>
@@ -116,12 +121,20 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>3.2.2</version>
-	<configuration>
+        <version>3.5.2</version>
+        <configuration>
+          <classpathDependencyExcludes>
+            <classpathDependencyExclude>org.jboss.slf4j:slf4j-jboss-logmanager</classpathDependencyExclude>
+          </classpathDependencyExcludes>
           <systemPropertyVariables>
 	    <keycloak-version>${keycloak.version}</keycloak-version>
           </systemPropertyVariables>
         </configuration>
+      </plugin>
+      <plugin> <!-- pretty up the code using google java standards `mvn fmt:format` -->
+        <groupId>com.spotify.fmt</groupId>
+        <artifactId>fmt-maven-plugin</artifactId>
+        <version>2.29</version>
       </plugin>
     </plugins>
   </build>
@@ -226,25 +239,25 @@
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>junit-jupiter</artifactId>
-      <version>1.19.3</version>
+      <version>1.20.6</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.github.dasniko</groupId>
       <artifactId>testcontainers-keycloak</artifactId>
-      <version>3.3.0</version>
+      <version>3.7.0</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.jboss.shrinkwrap.resolver</groupId>
       <artifactId>shrinkwrap-resolver-impl-maven-archive</artifactId>
-      <version>3.2.1</version>
+      <version>3.3.1</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
-      <version>1.4.5</version>
+      <version>1.5.10</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -262,13 +275,13 @@
     <dependency> <!-- so we can test webhooks for org methods -->
       <groupId>io.phasetwo.keycloak</groupId>
       <artifactId>keycloak-orgs</artifactId>
-      <version>[0.61,)</version>
+      <version>[0.107,)</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.keycloak</groupId>
       <artifactId>keycloak-admin-client</artifactId>
-      <version>${keycloak.version}</version>
+      <version>${keycloak-admin-client.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

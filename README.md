@@ -23,14 +23,18 @@ The rate of breaking changes upstream in Keycloak make it impossible for us to s
 
 The maven build can be triggered by running `mvn clean install`. It uses the shade plugin to package a fat-jar with all dependencies. Put the jar in your `providers` directory (for Quarkus) or `standalone/deployments` directory (for legacy) and rebuild/restart keycloak.
 
+### Releases
+
+You can also download a release jar directly from [Maven Central](https://central.sonatype.com/artifact/io.phasetwo.keycloak/keycloak-events).
+
 ## Use
 
 The `EventListenerProvider` implementations in this library rely on two utilities packaged within.
 
-1. The first is that configuration is loaded from Realm attributes. This means that you can update the configuration for these implementations at runtime by either writing directly to the `realm_attributes` table or by calling the [Realm Update](https://www.keycloak.org/docs-api/15.0/rest-api/index.html#_updaterealm) method. Also, In order to make using these easier, there is included a `RealmAttributesResource` that allows you to CRUD the attributes separately from updating the whole realm. It's available at the `/auth/realms/<realm>/attributes` endpoint. Attribute keys are `_providerConfig.<provider_id>.<optional:N>`, and the configurations are stored in the value field as JSON. Currently only single depth JSON objects are supported.
+1. The first is that configuration is loaded from Realm attributes. This means that you can update the configuration for these implementations at runtime by either writing directly to the `realm_attributes` table or by calling the [Realm Update](https://www.keycloak.org/docs-api/latest/rest-api/index.html#_put_adminrealmsrealm) method. Also, In order to make using these easier, there is included a `RealmAttributesResource` that allows you to CRUD the attributes separately from updating the whole realm. It's available at the `/auth/realms/<realm>/attributes` endpoint. Attribute keys are `_providerConfig.<provider_id>.<optional:N>`, and the configurations are stored in the value field as JSON. Currently only single depth JSON objects are supported.
 2. The optional `N` value in the key is relevant to the second important utility. The `EventListenerProviderFactory` implementations are all subclasses of `MultiEventListenerProviderFactory`, which enables multiple `EventListenerProvider` instances of the same type to run with different configurations. This is a facility that is not currently available in Keycloak, although some tickets and features in the future Admin UI indicate that it is coming soon.
 
-Most events require being enabled through the Admin UI. Go to (Configure) Realm Settings > Events (tab) > Event listeners. In the Event listeners dropdown select `ext-event-********` for the appropriate event being enabled.
+Most events require being enabled through the Admin UI. Go to (Configure) Realm Settings > Events (tab) > Event listeners. In the Event listeners dropdown, select the specific provider ID (e.g., `ext-event-script`, `ext-event-webhook`) for the event listener you want to enable, and click "Save".
 
 ### Script
 
@@ -43,38 +47,35 @@ The script event listener allows you to run JS event listeners in the same fashi
 - `session`: the KeycloakSession
 - `LOG`: a JBoss Logger
 
-From the Keycloak admin UI "Events"->"Config" section, add `ext-event-script` to the "Event Listeners" form field and click "Save".
+#### Steps to Configure the Script Event Listener
 
-The script event listener is configured by setting a Realm attribute in the Realm you have enabled the listener with a `_providerConfig.ext-event-script.N` key. The `N` value should correspond to a unique integer index for each script you want to run, and scripts will be run in that order.
+1. **Enable the Script Event Listener in the Admin UI**:
+   - Go to the Keycloak Admin UI.
+   - Navigate to (Configure) Realm Settings > Events (tab) > Event listeners.
+   - In the Event listeners dropdown, select `ext-event-script` and click "Save".
 
-The configuration requires 3 mandatory values:
-| Name | Required | Default | Description |
-| -----| -------- | ------- | ----------- |
-| `scriptName` | Y | | The name of the script |
-| `scriptDescription` | Y | | A description of what the script does |
-| `scriptCode` | Y | | The JS code |
+2. **Configure the Script via Realm Attribute**:
+   - The script is configured by setting a Realm attribute.
+   - **Note**: Keycloak's built-in Admin UI theme does not expose realm attributes for editing. To set this attribute, you have two options:
+     - Use the Phase Two Keycloak image with the admin theme set to `phasetwo.v2`, which provides a UI for managing realm attributes.
+     - Set the attribute via an API call to the [Realm Update](https://www.keycloak.org/docs-api/latest/rest-api/index.html#_put_adminrealmsrealm) endpoint or directly to the `realm_attributes` table.
+   - The attribute key is `_providerConfig.ext-event-script.N`, where `N` is a unique integer index (e.g., 0, 1, 2) for each script you want to run. Scripts are executed in order of their index.
+   - The attribute value must be a JSON object containing the following mandatory fields:
+     | Name | Required | Default | Description |
+     | -----| -------- | ------- | ----------- |
+     | `scriptName` | Y | | The name of the script |
+     | `scriptDescription` | Y | | A description of what the script does |
+     | `scriptCode` | Y | | The JS code |
 
-A trivial example:
-
-```js
-function onEvent(event) {
-  LOG.info(
-    event.type + " in realm " + realm.name + " for user " + user.username
-  );
-}
-
-function onAdminEvent(event, representation) {
-  LOG.info(
-    event.operationType +
-      " on " +
-      event.resourceType +
-      " in realm " +
-      realm.name +
-      " by user " +
-      authUser.username
-  );
-}
-```
+3. **Example Configuration**:
+   - Set the realm attribute `_providerConfig.ext-event-script.0` to the following JSON:
+     ```json
+     {
+       "scriptName": "Example Script",
+       "scriptDescription": "Logs events to the console",
+       "scriptCode": "function onEvent(event) {\n  LOG.info(event.type + \" in realm \" + realm.name + \" for user \" + user.username);\n}\n\nfunction onAdminEvent(event, representation) {\n  LOG.info(event.operationType + \" on \" + event.resourceType + \" in realm \" + realm.name + \" by user \" + authUser.username);\n}"
+     }
+     ```
 
 ### HTTP Sender
 
@@ -89,8 +90,8 @@ Configuration values:
 | `retry` | N | true | Should it use exponential backoff to retry on non 2xx response |
 | `backoffInitialInterval` | N | 500 | Initial interval value in milliseconds |
 | `backoffMaxElapsedTime` | N | 900000 | Maximum elapsed time in milliseconds |
-| `backoffMaxInterval` | N | 60000 | Maximum back off time in milliseconds |
-| `backoffMultiplier` | N | 1.5 | Multiplier value (E.g. 1.5 is 50% increase per back off) |
+| `backoffMaxInterval` | N | 180000 | Maximum back off time in milliseconds |
+| `backoffMultiplier` | N | 5 | Multiplier value (E.g. 1.5 is 50% increase per back off) |
 | `backoffRandomizationFactor` | N | 0.5 | Randomization factor (E.g. 0.5 results in a random period ranging between 50% below and 50% above the retry interval) |
 
 ### Adding Configuration to your EventListenerProvider
@@ -143,7 +144,12 @@ This provides the entities and REST endpoints required to allow webhook subscrip
 
 Webhooks are sent using the same mechanics as the `HttpSenderEventListenerProvider`, and there is an automatic exponential backoff if there is not a 2xx response. The sending tasks are scheduled in a thread pool and executed after the Keycloak transaction has been committed.
 
-Enable webhook events in the Admin UI by going to (Configure) Realm Settings > Events (tab) > Event Listeners, in the Event listeners dropdown select `ext-event-webhook` and save.
+#### Steps to Enable Webhook Events
+
+1. **Enable Webhook Events in the Admin UI**:
+   - Go to the Keycloak Admin UI.
+   - Navigate to (Configure) Realm Settings > Events (tab) > Event Listeners.
+   - In the Event listeners dropdown, select `ext-event-webhook` and save.
 
 #### Managing webhook subscriptions
 
@@ -172,6 +178,19 @@ The webhook object has this format:
 ```
 
 For creating and updating of webhooks, `id`, `createdBy` and `createdAt` are ignored. `secret` is not sent when fetching webhooks.
+
+#### Storing webhook events and sends
+
+This extension contains the functionality to store and retrieve the payload that was sent to a webhook, as well as the sending status. In order to enable this functionality, you must set the SPI config variable `--spi-events-listener-ext-event-webhook-store-webhook-events=true` and ensure that your realm settings have events and admin events enabled, which causes them to be stored using the configured `EventStoreProvider`.
+
+This also enables a few additional custom REST endpoints for querying information about the payload and status of webhook sends.
+
+| Path                               | Method   | Payload        | Returns                 | Description    |
+| ---------------------------------- | -------- | -------------- | ----------------------- | -------------- |
+| `/auth/realms/:realm/webhooks/:id/sends`             | `GET`    | `first`, `max` query params for pagination | Webhook send objects (brief)       | Get webhook sends        |
+| `/auth/realms/:realm/webhooks/:id/sends/:sid`        | `GET`    |                                            | Webhook send object (with payload) | Get a webhook send       |
+| `/auth/realms/:realm/webhooks/:id/sends/:sid/resend` | `POST`   |                                            | `202`                              | Resend a webhook payload |
+
 
 ##### Example
 
@@ -207,8 +226,8 @@ There is also a custom REST resource that allows publishing of arbitrary events.
 It is possible to disable the scripts run by the `ScriptEventListenerProvider` by setting `SCRIPTS_DISABLED=true`. This may be desirable in shared environments where it is not ideal to allow user code to run in the Keycloak process. Note that this will just cause the scripts to fail silently.
 
 #### Webhooks
-There is a special catch-all webhook that can be used by system owners to always send events to an endpoint, even though it is not defined as a manageable webhook entity. Set the `WEBHOOK_URI` AND `WEBHOOK_SECRET` environtment variables, and all events will be sent to this endpoint. This is used, for example, in cases where system owners want to send events to a more scalable store.
+There is a special catch-all webhook that can be used by system owners to always send events to an endpoint, even though it is not defined as a manageable webhook entity. Set the `WEBHOOK_URI` AND `WEBHOOK_SECRET` environment variables, and all events will be sent to this endpoint. This is used, for example, in cases where system owners want to send events to a more scalable store.
 
 ---
 
-All documentation, source code and other files in this repository are Copyright 2023 Phase Two, Inc.
+All documentation, source code and other files in this repository are Copyright 2025 Phase Two, Inc.

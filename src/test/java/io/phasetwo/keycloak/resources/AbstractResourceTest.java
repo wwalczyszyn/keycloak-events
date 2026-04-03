@@ -13,7 +13,7 @@ public abstract class AbstractResourceTest {
 
   public static final String KEYCLOAK_IMAGE =
       String.format(
-          "quay.io/phasetwo/keycloak-crdb:%s", System.getProperty("keycloak-version", "23.0.0"));
+          "quay.io/phasetwo/keycloak-crdb:%s", System.getProperty("keycloak-version", "26.5.0"));
   public static final String REALM = "master";
   public static final String ADMIN_CLI = "admin-cli";
 
@@ -48,6 +48,7 @@ public abstract class AbstractResourceTest {
           .withReuse(true)
           .withProviderClassesFrom("target/classes")
           .withProviderLibsFrom(getDeps())
+          .withCustomCommand("--spi-events-listener-ext-event-webhook-store-webhook-events=true")
           .withAccessToHost(true);
 
   protected static final int WEBHOOK_SERVER_PORT = 8083;

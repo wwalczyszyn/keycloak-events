@@ -19,7 +19,7 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.junit.jupiter.api.Test;
 import org.keycloak.admin.client.Keycloak;
-import org.keycloak.broker.provider.util.SimpleHttp;
+import org.keycloak.broker.provider.util.LegacySimpleHttp;
 
 @JBossLog
 public class EventsResourceTest extends AbstractResourceTest {
@@ -46,13 +46,14 @@ public class EventsResourceTest extends AbstractResourceTest {
     AtomicReference<String> body = new AtomicReference<String>();
     // create a server on a free port with a handler to listen for the event
     int port = WEBHOOK_SERVER_PORT;
-    createWebhook(
-        keycloak,
-        httpClient,
-        webhookUrl(),
-        "http://host.testcontainers.internal:" + port + "/webhook",
-        "qlfwemke",
-        ImmutableSet.of("admin.*", "foo.*"));
+    String webhookId =
+        createWebhook(
+            keycloak,
+            httpClient,
+            webhookUrl(),
+            "http://host.testcontainers.internal:" + port + "/webhook",
+            "qlfwemke",
+            ImmutableSet.of("admin.*", "foo.*"));
 
     Server server = new Server(port);
     server
@@ -79,6 +80,7 @@ public class EventsResourceTest extends AbstractResourceTest {
     assertNotNull(body.get());
     assertThat(body.get(), containsString("foo.BAR"));
 
+    removeWebhook(keycloak, httpClient, webhookUrl(), webhookId);
     removeEventListener(keycloak, "master", "ext-event-webhook");
     server.stop();
   }
@@ -120,8 +122,8 @@ public class EventsResourceTest extends AbstractResourceTest {
     rep.setRealm("master");
     rep.setName(key);
     rep.setValue(value);
-    SimpleHttp.Response resp =
-        SimpleHttp.doPost(attributesUrl(), httpClient)
+    LegacySimpleHttp.Response resp =
+        LegacySimpleHttp.doPost(attributesUrl(), httpClient)
             .auth(keycloak.tokenManager().getAccessTokenString())
             .json(rep)
             .asResponse();
@@ -147,7 +149,7 @@ public class EventsResourceTest extends AbstractResourceTest {
     value = "{ \"targetUri\": \""+targetUri+"\", \"retry\": true }";
     rep.setValue(value);
     resp =
-        SimpleHttp.doPut(attributesUrl() + "/" + urlencode(key), httpClient)
+        LegacySimpleHttp.doPut(attributesUrl() + "/" + urlencode(key), httpClient)
         .auth(keycloak.tokenManager().getAccessTokenString())
         .json(rep)
         .asResponse();
@@ -165,16 +167,15 @@ public class EventsResourceTest extends AbstractResourceTest {
     assertThat(body.get(), containsString("foo.BAR"));
 
     */
-
     removeEventListener(keycloak, "master", "ext-event-http");
     // wait and stop
     Thread.sleep(1000l);
     server.stop();
   }
 
-  SimpleHttp.Response sendEvent(Keycloak keycloak, Map<String, String> ev) throws Exception {
-    SimpleHttp.Response resp =
-        SimpleHttp.doPost(eventsUrl(), httpClient)
+  LegacySimpleHttp.Response sendEvent(Keycloak keycloak, Map<String, String> ev) throws Exception {
+    LegacySimpleHttp.Response resp =
+        LegacySimpleHttp.doPost(eventsUrl(), httpClient)
             .auth(keycloak.tokenManager().getAccessTokenString())
             .json(ev)
             .asResponse();

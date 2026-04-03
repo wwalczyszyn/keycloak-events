@@ -16,7 +16,7 @@ import java.util.Set;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
-import org.keycloak.broker.provider.util.SimpleHttp;
+import org.keycloak.broker.provider.util.LegacySimpleHttp;
 import org.keycloak.representations.idm.RealmEventsConfigRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -75,8 +75,8 @@ public class Helpers {
       rep.setEventTypes(types);
     }
 
-    SimpleHttp.Response response =
-        SimpleHttp.doPost(baseUrl, httpClient)
+    LegacySimpleHttp.Response response =
+        LegacySimpleHttp.doPost(baseUrl, httpClient)
             .auth(keycloak.tokenManager().getAccessTokenString())
             .json(rep)
             .asResponse();
@@ -85,6 +85,17 @@ public class Helpers {
     String loc = response.getFirstHeader("Location");
     String id = loc.substring(loc.lastIndexOf("/") + 1);
     return id;
+  }
+
+  public static void removeWebhook(
+      Keycloak keycloak, CloseableHttpClient httpClient, String baseUrl, String webhookId)
+      throws Exception {
+
+    LegacySimpleHttp.Response response =
+        LegacySimpleHttp.doDelete(baseUrl + "/" + webhookId, httpClient)
+            .auth(keycloak.tokenManager().getAccessTokenString())
+            .asResponse();
+    assertThat(response.getStatus(), is(204));
   }
 
   public static String urlencode(String u) {
